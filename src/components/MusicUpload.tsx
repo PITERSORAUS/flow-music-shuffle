@@ -1,11 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useMusicStore } from '../lib/musicStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { Image, Upload } from 'lucide-react';
 
 const MusicUpload: React.FC = () => {
   const { addMusic } = useMusicStore();
@@ -13,8 +14,11 @@ const MusicUpload: React.FC = () => {
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Placeholder de covers para seleção rápida
   const coverPlaceholders = [
@@ -24,15 +28,39 @@ const MusicUpload: React.FC = () => {
     'https://images.unsplash.com/photo-1470813740244-df37b8c1edcb?w=400&h=400&fit=crop'
   ];
   
-  const createAudioUrl = async (file: File): Promise<string> => {
+  const createObjectUrl = (file: File): string => {
     return URL.createObjectURL(file);
+  };
+  
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setCoverFile(file);
+      setCoverPreview(createObjectUrl(file));
+      setCoverUrl(''); // Limpa a URL externa quando um arquivo é selecionado
+    }
+  };
+
+  const handleSelectCover = (url: string) => {
+    setCoverUrl(url);
+    setCoverPreview(null);
+    setCoverFile(null);
+  };
+
+  const handleOpenCustomFileDialog = () => {
+    fileInputRef.current?.click();
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!title || !artist || !coverUrl) {
-      toast.error('Preencha todos os campos obrigatórios');
+    if (!title || !artist) {
+      toast.error('Preencha título e artista');
+      return;
+    }
+    
+    if (!coverUrl && !coverFile) {
+      toast.error('Selecione uma capa para a música');
       return;
     }
     
@@ -44,13 +72,16 @@ const MusicUpload: React.FC = () => {
     setIsUploading(true);
     
     try {
-      // Cria uma URL do objeto para o arquivo de áudio carregado
-      const audioUrl = await createAudioUrl(audioFile);
+      // Cria URLs de objeto para os arquivos carregados
+      const audioUrl = createObjectUrl(audioFile);
+      
+      // Usa o arquivo de capa ou a URL externa
+      const finalCoverUrl = coverFile ? createObjectUrl(coverFile) : coverUrl;
       
       await addMusic({
         title,
         artist,
-        coverUrl,
+        coverUrl: finalCoverUrl,
         audioUrl
       });
       
@@ -58,6 +89,8 @@ const MusicUpload: React.FC = () => {
       setTitle('');
       setArtist('');
       setCoverUrl('');
+      setCoverPreview(null);
+      setCoverFile(null);
       setAudioFile(null);
       setIsOpen(false);
     } catch (error) {
@@ -67,9 +100,24 @@ const MusicUpload: React.FC = () => {
       setIsUploading(false);
     }
   };
+
+  const resetForm = () => {
+    setTitle('');
+    setArtist('');
+    setCoverUrl('');
+    setCoverPreview(null);
+    setCoverFile(null);
+    setAudioFile(null);
+  };
   
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog 
+      open={isOpen} 
+      onOpenChange={(open) => {
+        setIsOpen(open);
+        if (!open) resetForm();
+      }}
+    >
       <DialogTrigger asChild>
         <Button className="bg-purps-600 hover:bg-purps-700">
           Upload de Música
@@ -106,20 +154,65 @@ const MusicUpload: React.FC = () => {
           
           <div className="space-y-2">
             <Label>Capa da Música*</Label>
-            <div className="grid grid-cols-4 gap-2">
-              {coverPlaceholders.map((url) => (
-                <div 
-                  key={url} 
-                  className={`aspect-square rounded-md overflow-hidden cursor-pointer border-2 ${coverUrl === url ? 'border-purps-500' : 'border-transparent'}`}
-                  onClick={() => setCoverUrl(url)}
-                >
-                  <img 
-                    src={url} 
-                    alt="Cover option" 
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ))}
+            
+            {/* Upload personalizado */}
+            <div className="mb-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCoverChange}
+                className="hidden"
+              />
+              
+              <Button 
+                type="button"
+                onClick={handleOpenCustomFileDialog}
+                variant="outline"
+                className="w-full flex items-center justify-center gap-2 h-20 border-dashed"
+              >
+                {coverPreview ? (
+                  <div className="flex items-center gap-2">
+                    <img 
+                      src={coverPreview} 
+                      alt="Cover preview" 
+                      className="h-16 w-16 object-cover rounded"
+                    />
+                    <span className="text-sm">Alterar imagem</span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload size={20} />
+                    <span>Upload de capa personalizada</span>
+                  </>
+                )}
+              </Button>
+              
+              {coverPreview && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Imagem personalizada selecionada
+                </p>
+              )}
+            </div>
+            
+            {/* Capas pré-definidas */}
+            <div className="mt-4">
+              <p className="text-sm text-gray-400 mb-2">Ou escolha uma das capas pré-definidas:</p>
+              <div className="grid grid-cols-4 gap-2">
+                {coverPlaceholders.map((url) => (
+                  <div 
+                    key={url} 
+                    className={`aspect-square rounded-md overflow-hidden cursor-pointer border-2 ${coverUrl === url ? 'border-purps-500' : 'border-transparent'}`}
+                    onClick={() => handleSelectCover(url)}
+                  >
+                    <img 
+                      src={url} 
+                      alt="Cover option" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
           

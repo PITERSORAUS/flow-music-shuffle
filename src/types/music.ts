@@ -6,6 +6,8 @@ export interface Music {
   coverUrl: string;
   audioUrl: string;
   duration: number;
+  likes: number;
+  plays: number;
 }
 
 // Define tipos de fontes de áudio compatíveis

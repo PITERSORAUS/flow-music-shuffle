@@ -1,17 +1,37 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Music } from '../types/music';
 import { useMusicStore } from '../lib/musicStore';
-import { Play, Pause } from 'lucide-react';
+import { Play, Pause, Heart, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toast } from 'sonner';
 
 interface MusicCardProps {
   music: Music;
 }
 
 const MusicCard: React.FC<MusicCardProps> = ({ music }) => {
-  const { currentMusic, isPlaying, setCurrentMusic, setIsPlaying } = useMusicStore();
+  const { 
+    currentMusic, 
+    isPlaying, 
+    setCurrentMusic, 
+    setIsPlaying,
+    likeMusic,
+    deleteMusic
+  } = useMusicStore();
   
+  const [isDeleting, setIsDeleting] = useState(false);
   const isCurrentTrack = currentMusic?.id === music.id;
   
   const handlePlayToggle = (e: React.MouseEvent) => {
@@ -21,6 +41,25 @@ const MusicCard: React.FC<MusicCardProps> = ({ music }) => {
       setIsPlaying(!isPlaying);
     } else {
       setCurrentMusic(music);
+    }
+  };
+
+  const handleLikeMusic = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    likeMusic(music.id);
+    toast.success('Música curtida!');
+  };
+  
+  const handleDeleteMusic = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteMusic(music.id);
+      toast.success('Música removida com sucesso!');
+    } catch (error) {
+      toast.error('Erro ao remover música');
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
     }
   };
   
@@ -55,7 +94,57 @@ const MusicCard: React.FC<MusicCardProps> = ({ music }) => {
       <div className="p-3 flex flex-col">
         <h3 className="font-semibold line-clamp-1 text-sm text-white">{music.title}</h3>
         <p className="text-xs text-gray-400 mt-1">{music.artist}</p>
-        <p className="text-xs text-gray-500 mt-2">{formatDuration(music.duration)}</p>
+        
+        <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center text-xs text-gray-400">
+              <Play size={14} className="mr-1" />
+              <span>{music.plays}</span>
+            </div>
+            
+            <button 
+              onClick={handleLikeMusic} 
+              className="flex items-center text-xs text-gray-400 hover:text-purps-400 transition-colors"
+            >
+              <Heart size={14} className={`mr-1 ${music.likes > 0 ? 'fill-purps-400 text-purps-400' : ''}`} />
+              <span>{music.likes}</span>
+            </button>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-gray-500">{formatDuration(music.duration)}</p>
+            
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  className="h-7 w-7 p-0 text-gray-400 hover:text-red-500 hover:bg-transparent"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tem certeza que deseja excluir a música "{music.title}"?<br />
+                    Esta ação não pode ser desfeita.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleDeleteMusic}
+                    className="bg-red-600 hover:bg-red-700"
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? 'Removendo...' : 'Remover'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
       </div>
     </div>
   );

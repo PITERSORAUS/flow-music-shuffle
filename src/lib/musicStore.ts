@@ -11,7 +11,9 @@ const demoMusics: Music[] = [
     artist: 'M83',
     coverUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=400&fit=crop',
     audioUrl: 'https://www2.cs.uic.edu/~i101/SoundFiles/BabyElephantWalk60.wav',
-    duration: 146
+    duration: 146,
+    likes: 5,
+    plays: 12
   },
   {
     id: '2',
@@ -19,7 +21,9 @@ const demoMusics: Music[] = [
     artist: 'Synth Wave',
     coverUrl: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=400&h=400&fit=crop',
     audioUrl: 'https://www2.cs.uic.edu/~i101/SoundFiles/ImperialMarch60.wav',
-    duration: 180
+    duration: 180,
+    likes: 3,
+    plays: 8
   },
   {
     id: '3',
@@ -27,7 +31,9 @@ const demoMusics: Music[] = [
     artist: 'Ocean Mind',
     coverUrl: 'https://images.unsplash.com/photo-1470813740244-df37b8c1edcb?w=400&h=400&fit=crop',
     audioUrl: 'https://www2.cs.uic.edu/~i101/SoundFiles/StarWars60.wav',
-    duration: 131
+    duration: 131,
+    likes: 7,
+    plays: 15
   }
 ];
 
@@ -70,8 +76,9 @@ interface MusicState {
   shuffleQueue: Music[];
   queueIndex: number;
   audio: HTMLAudioElement | null;
+  completedPlays: Set<string>; // Armazena IDs de músicas completamente reproduzidas
   // Ações
-  addMusic: (music: Omit<Music, 'id' | 'duration'>) => Promise<void>;
+  addMusic: (music: Omit<Music, 'id' | 'duration' | 'likes' | 'plays'>) => Promise<void>;
   setCurrentMusic: (music: Music) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setCurrentTime: (time: number) => void;
@@ -79,6 +86,8 @@ interface MusicState {
   playNext: () => void;
   playPrevious: () => void;
   initAudio: () => void;
+  likeMusic: (id: string) => void;
+  deleteMusic: (id: string) => Promise<void>;
 }
 
 export const useMusicStore = create<MusicState>((set, get) => ({
@@ -90,6 +99,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
   shuffleQueue: [],
   queueIndex: 0,
   audio: null,
+  completedPlays: new Set<string>(),
 
   addMusic: async (musicData) => {
     try {
@@ -101,6 +111,8 @@ export const useMusicStore = create<MusicState>((set, get) => ({
         ...musicData,
         id: Date.now().toString(),
         duration: isNaN(duration) ? 180 : duration, // Usa duração padrão se não conseguir obter
+        likes: 0,
+        plays: 0
       };
       
       set(state => {
@@ -208,6 +220,67 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     get().setCurrentMusic(prevMusic);
   },
 
+  likeMusic: (id: string) => {
+    set(state => ({
+      musics: state.musics.map(music => 
+        music.id === id 
+          ? { ...music, likes: music.likes + 1 } 
+          : music
+      ),
+      // Atualiza também a música atual se for a mesma
+      currentMusic: state.currentMusic?.id === id
+        ? { ...state.currentMusic, likes: (state.currentMusic.likes || 0) + 1 }
+        : state.currentMusic,
+      // Atualiza a fila de shuffle
+      shuffleQueue: state.shuffleQueue.map(music =>
+        music.id === id
+          ? { ...music, likes: music.likes + 1 }
+          : music
+      )
+    }));
+  },
+
+  deleteMusic: async (id: string) => {
+    return new Promise((resolve, reject) => {
+      try {
+        const state = get();
+        const isCurrentlyPlaying = state.currentMusic?.id === id;
+        
+        // Se a música a ser excluída está tocando, toca a próxima
+        if (isCurrentlyPlaying) {
+          state.playNext();
+        }
+        
+        // Aguarda um momento para garantir que a mudança ocorreu
+        setTimeout(() => {
+          set(state => {
+            const updatedMusics = state.musics.filter(m => m.id !== id);
+            const updatedQueue = state.shuffleQueue.filter(m => m.id !== id);
+            
+            // Ajusta o índice da fila se necessário
+            let newQueueIndex = state.queueIndex;
+            if (updatedQueue.length > 0) {
+              if (newQueueIndex >= updatedQueue.length) {
+                newQueueIndex = 0;
+              }
+            }
+            
+            return {
+              musics: updatedMusics,
+              shuffleQueue: updatedQueue,
+              queueIndex: newQueueIndex,
+            };
+          });
+          
+          resolve();
+        }, 300);
+      } catch (error) {
+        console.error('Erro ao excluir música:', error);
+        reject(error);
+      }
+    });
+  },
+
   initAudio: () => {
     if (get().audio) return;
 
@@ -221,12 +294,52 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     
     // Atualiza o currentTime enquanto toca
     audio.addEventListener('timeupdate', () => {
+      const { currentMusic, completedPlays } = get();
       set({ currentTime: audio.currentTime });
+      
+      // Se a música estiver quase no final (95%) e não tiver sido contabilizada como "play" completo
+      if (currentMusic && 
+          audio.currentTime > (currentMusic.duration * 0.95) && 
+          !completedPlays.has(currentMusic.id)) {
+        
+        // Registra o play
+        set(state => {
+          const newCompletedPlays = new Set(state.completedPlays);
+          newCompletedPlays.add(currentMusic.id);
+          
+          return {
+            completedPlays: newCompletedPlays,
+            musics: state.musics.map(music => 
+              music.id === currentMusic.id 
+                ? { ...music, plays: music.plays + 1 } 
+                : music
+            ),
+            // Atualiza também a música atual
+            currentMusic: { ...currentMusic, plays: currentMusic.plays + 1 },
+            // Atualiza a fila de shuffle
+            shuffleQueue: state.shuffleQueue.map(music =>
+              music.id === currentMusic.id
+                ? { ...music, plays: music.plays + 1 }
+                : music
+            )
+          };
+        });
+      }
     });
     
     // Quando a música termina, pula para a próxima
     audio.addEventListener('ended', () => {
       get().playNext();
+      
+      // Limpa o registro de play da música que terminou
+      const { currentMusic, completedPlays } = get();
+      if (currentMusic) {
+        set(state => {
+          const newCompletedPlays = new Set(state.completedPlays);
+          newCompletedPlays.delete(currentMusic.id);
+          return { completedPlays: newCompletedPlays };
+        });
+      }
     });
     
     // Inicializa o shuffleQueue se ainda não foi feito
