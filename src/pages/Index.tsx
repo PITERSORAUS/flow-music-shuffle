@@ -1,12 +1,38 @@
-// Update this page (the content is just a fallback if you fail to update the page)
 
-const Index = () => {
+import React, { useEffect } from 'react';
+import MusicList from '../components/MusicList';
+import MusicPlayer from '../components/MusicPlayer';
+import MusicUpload from '../components/MusicUpload';
+import { useMusicStore } from '../lib/musicStore';
+
+const Index: React.FC = () => {
+  const { initAudio } = useMusicStore();
+  
+  // Inicializa o player quando a página carrega
+  useEffect(() => {
+    initAudio();
+  }, [initAudio]);
+  
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background text-foreground pb-24">
+      {/* Header */}
+      <header className="border-b border-gray-800 py-4 px-4">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purps-400 to-purps-600">
+            PurpsCloud
+          </h1>
+          
+          <MusicUpload />
+        </div>
+      </header>
+      
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto p-4 pt-8">
+        <MusicList />
+      </main>
+      
+      {/* Player fixo - aparece quando há música */}
+      <MusicPlayer />
     </div>
   );
 };
