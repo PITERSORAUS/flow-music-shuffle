@@ -3,14 +3,14 @@ import { create } from 'zustand';
 import { Music } from '../types/music';
 import { toast } from 'sonner';
 
-// Demo música inicial
+// Demo músicas iniciais com URLs de áudio confiáveis
 const demoMusics: Music[] = [
   {
     id: '1',
     title: 'Midnight City',
     artist: 'M83',
     coverUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=400&fit=crop',
-    audioUrl: 'https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3',
+    audioUrl: 'https://www2.cs.uic.edu/~i101/SoundFiles/BabyElephantWalk60.wav',
     duration: 146
   },
   {
@@ -18,7 +18,7 @@ const demoMusics: Music[] = [
     title: 'Electric Dreams',
     artist: 'Synth Wave',
     coverUrl: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=400&h=400&fit=crop',
-    audioUrl: 'https://assets.mixkit.co/music/preview/mixkit-hip-hop-02-621.mp3',
+    audioUrl: 'https://www2.cs.uic.edu/~i101/SoundFiles/ImperialMarch60.wav',
     duration: 180
   },
   {
@@ -26,7 +26,7 @@ const demoMusics: Music[] = [
     title: 'Deep Waters',
     artist: 'Ocean Mind',
     coverUrl: 'https://images.unsplash.com/photo-1470813740244-df37b8c1edcb?w=400&h=400&fit=crop',
-    audioUrl: 'https://assets.mixkit.co/music/preview/mixkit-serene-view-443.mp3',
+    audioUrl: 'https://www2.cs.uic.edu/~i101/SoundFiles/StarWars60.wav',
     duration: 131
   }
 ];
@@ -40,6 +40,25 @@ const generateShuffleQueue = (musics: Music[]) => {
     [queue[i], queue[j]] = [queue[j], queue[i]];
   }
   return queue;
+};
+
+// Função para verificar se o áudio é compatível com o navegador
+const canPlayAudio = (audio: HTMLAudioElement, type: string): boolean => {
+  return audio.canPlayType(type) !== '';
+};
+
+// Função para obter a duração real do arquivo de áudio
+const getAudioDuration = async (url: string): Promise<number> => {
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    audio.addEventListener('loadedmetadata', () => {
+      resolve(audio.duration);
+    });
+    audio.addEventListener('error', () => {
+      resolve(180); // Duração padrão em caso de erro
+    });
+    audio.src = url;
+  });
 };
 
 interface MusicState {
@@ -73,24 +92,31 @@ export const useMusicStore = create<MusicState>((set, get) => ({
   audio: null,
 
   addMusic: async (musicData) => {
-    // Em uma aplicação real, faria upload do arquivo para um servidor
-    // Por enquanto, simulamos com um ID aleatório
-    const newMusic: Music = {
-      ...musicData,
-      id: Date.now().toString(),
-      duration: 180, // Duração padrão simulada
-    };
-    
-    set(state => {
-      const updatedMusics = [...state.musics, newMusic];
-      // Atualiza o shuffle queue quando uma nova música é adicionada
-      return { 
-        musics: updatedMusics, 
-        shuffleQueue: generateShuffleQueue(updatedMusics) 
+    try {
+      // Em uma aplicação real, faria upload do arquivo para um servidor
+      // Simulamos com um ID aleatório e obtemos a duração real quando possível
+      const duration = await getAudioDuration(musicData.audioUrl);
+      
+      const newMusic: Music = {
+        ...musicData,
+        id: Date.now().toString(),
+        duration: isNaN(duration) ? 180 : duration, // Usa duração padrão se não conseguir obter
       };
-    });
-    
-    toast.success('Música adicionada com sucesso!');
+      
+      set(state => {
+        const updatedMusics = [...state.musics, newMusic];
+        // Atualiza o shuffle queue quando uma nova música é adicionada
+        return { 
+          musics: updatedMusics, 
+          shuffleQueue: generateShuffleQueue(updatedMusics) 
+        };
+      });
+      
+      toast.success('Música adicionada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao adicionar música:', error);
+      toast.error('Não foi possível adicionar a música');
+    }
   },
 
   setCurrentMusic: (music) => {
@@ -106,7 +132,13 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     if (audio) {
       audio.src = music.audioUrl;
       audio.currentTime = 0;
-      audio.play().catch(e => console.error('Erro ao reproduzir áudio:', e));
+      audio.play().catch(e => {
+        console.error('Erro ao reproduzir áudio:', e);
+        // Tenta reproduzir de qualquer forma caso haja erro de autoplay
+        document.addEventListener('click', () => {
+          audio.play().catch(() => {});
+        }, { once: true });
+      });
       set({ isPlaying: true });
     }
   },
@@ -115,7 +147,18 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     const { audio } = get();
     if (audio) {
       if (isPlaying) {
-        audio.play().catch(e => console.error('Erro ao reproduzir áudio:', e));
+        audio.play().catch(e => {
+          console.error('Erro ao reproduzir áudio:', e);
+          // Tenta reproduzir após interação do usuário
+          document.addEventListener('click', () => {
+            audio.play().catch(() => {});
+            set({ isPlaying: true });
+          }, { once: true });
+          
+          // Mantém o estado como pausado se a reprodução falhar
+          set({ isPlaying: false });
+          return;
+        });
       } else {
         audio.pause();
       }
@@ -127,7 +170,11 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     set({ currentTime: time });
     const { audio } = get();
     if (audio) {
-      audio.currentTime = time;
+      try {
+        audio.currentTime = time;
+      } catch (e) {
+        console.error('Erro ao definir tempo de áudio:', e);
+      }
     }
   },
 
@@ -166,6 +213,11 @@ export const useMusicStore = create<MusicState>((set, get) => ({
 
     const audio = new Audio();
     audio.volume = get().volume;
+    
+    // Adiciona eventos de erro para melhor diagnóstico
+    audio.addEventListener('error', (e) => {
+      console.error('Erro no elemento de áudio:', e);
+    });
     
     // Atualiza o currentTime enquanto toca
     audio.addEventListener('timeupdate', () => {

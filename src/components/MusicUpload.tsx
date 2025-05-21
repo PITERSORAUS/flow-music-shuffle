@@ -24,6 +24,10 @@ const MusicUpload: React.FC = () => {
     'https://images.unsplash.com/photo-1470813740244-df37b8c1edcb?w=400&h=400&fit=crop'
   ];
   
+  const createAudioUrl = async (file: File): Promise<string> => {
+    return URL.createObjectURL(file);
+  };
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -40,11 +44,8 @@ const MusicUpload: React.FC = () => {
     setIsUploading(true);
     
     try {
-      // Em uma aplicação real, faríamos upload do arquivo para um serviço de armazenamento
-      // Como é um demo, vamos usar uma URL pública de exemplo para simular
-      
-      // Esta URL seria do arquivo que o usuário fez upload
-      const audioUrl = 'https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3';
+      // Cria uma URL do objeto para o arquivo de áudio carregado
+      const audioUrl = await createAudioUrl(audioFile);
       
       await addMusic({
         title,

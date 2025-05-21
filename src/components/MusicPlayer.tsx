@@ -23,6 +23,7 @@ const MusicPlayer: React.FC = () => {
   const previousVolume = useRef(volume);
   
   const formatTime = (time: number) => {
+    if (isNaN(time)) return "0:00";
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
@@ -128,7 +129,7 @@ const MusicPlayer: React.FC = () => {
             >
               <div 
                 className="progress-filled"
-                style={{ width: `${(currentTime / currentMusic.duration) * 100}%` }}
+                style={{ width: `${(currentTime / (currentMusic.duration || 1)) * 100}%` }}
               />
             </div>
             

@@ -7,3 +7,9 @@ export interface Music {
   audioUrl: string;
   duration: number;
 }
+
+// Define tipos de fontes de áudio compatíveis
+export type AudioSource = {
+  type: string;
+  url: string;
+};
